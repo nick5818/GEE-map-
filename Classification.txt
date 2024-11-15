@@ -1,0 +1,96 @@
+// Define the time range for 2021
+var startDate = '2021-01-01';
+var endDate = '2021-12-31';
+
+// Filter Landsat 8 imagery for the year 2021
+var img = ee.ImageCollection('LANDSAT/LC08/C01/T1_TOA')
+  .filterDate(startDate, endDate);
+
+// Take the median value of the image collection to create a composite
+var imgC = img.median();
+
+// Visualize the composite image
+Map.addLayer(imgC, {bands: ['B4', 'B3', 'B2'], max: 0.3}, 'Landsat Composite 2021');
+
+// Define a region in which to generate a sample of the input
+// Load the feature collection for Greece and filter for Athens
+var athens = ee.FeatureCollection([geometry])
+
+// Visualize Athens and set the map center
+Map.addLayer(athens, {}, 'Athens');
+Map.centerObject(athens, 10);
+
+// Make the training dataset
+var train = imgC.sample({
+  region: athens,
+  scale: 200,
+  numPixels: 1000 // Reduced sample size
+});
+
+// Instantiate the clusterer and train it
+// K-means
+var kmeans = ee.Clusterer.wekaKMeans(4).train(train);
+
+// Cluster the input using the trained clusterer
+var kmeansresult = imgC.cluster(kmeans).clip(athens);
+
+// LVQ Clustering
+var lvq = ee.Clusterer.wekaLVQ(4).train(train);
+var lvqresult = imgC.cluster(lvq).clip(athens);
+
+// X-Means Clustering
+var xmeans = ee.Clusterer.wekaXMeans(4, 5).train(train);
+var xmeansresult = imgC.cluster(xmeans).clip(athens);
+
+// Display the clusters with random colors
+Map.addLayer(kmeansresult.randomVisualizer(), {}, 'K-Means');
+Map.addLayer(xmeansresult.randomVisualizer(), {}, 'X-Means');
+Map.addLayer(lvqresult.randomVisualizer(), {}, 'LVQ');
+
+// Load validation image
+// ESA WorldCover 10m v200 (11 classes)
+var lulc = ee.Image('ESA/WorldCover/v200/2021')
+    .clip(athens);
+
+Map.addLayer(lulc, {bands: ['Map']}, 'Landcover');
+
+// Export the k-means result
+Export.image.toDrive({
+  image: kmeansresult,
+  description: 'kmeans_result',
+  scale: 30,
+  region: athens,
+  fileFormat: 'GeoTIFF'
+});
+
+// Export the x-means result
+Export.image.toDrive({
+  image: xmeansresult,
+  description: 'xmeans_result',
+  scale: 30,
+  region: athens,
+  fileFormat: 'GeoTIFF'
+});
+
+// Export the LVQ result
+Export.image.toDrive({
+  image: lvqresult,
+  description: 'lvq_result',
+  scale: 30,
+  region: athens,
+  fileFormat: 'GeoTIFF'
+});
+
+// Export the ESA WorldCover result
+Export.image.toDrive({
+  image: lulc.select('Map'),
+  description: 'esa_worldcover',
+  scale: 30,
+  region: athens,
+  fileFormat: 'GeoTIFF'
+});
+
+
+
+
+
